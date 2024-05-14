@@ -1,0 +1,75 @@
+{
+    "version": "0.1.0",
+    "name": "my_anchor_program",
+    "instructions": [
+      {
+        "name": "initialize",
+        "accounts": [
+          {
+            "name": "baseAccount",
+            "isMut": true,
+            "isSigner": true
+          }
+        ],
+        "args": [
+          {
+            "name": "initData",
+            "type": "u64"
+          }
+        ]
+      },
+      {
+        "name": "updateData",
+        "accounts": [
+          {
+            "name": "baseAccount",
+            "isMut": true,
+            "isSigner": false
+          }
+        ],
+        "args": [
+          {
+            "name": "newData",
+            "type": "u64"
+          }
+        ]
+      }
+    ],
+    "accounts": [
+      {
+        "name": "BaseAccount",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "data",
+              "type": "u64"
+            },
+            {
+              "name": "owner",
+              "type": "publicKey"
+            }
+          ]
+        }
+      }
+    ],
+    "types": [
+      {
+        "name": "CustomType",
+        "type": {
+          "kind": "struct",
+          "fields": [
+            {
+              "name": "field1",
+              "type": "u64"
+            },
+            {
+              "name": "field2",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    ]
+  }
+  

@@ -1,2 +1,2 @@
-# pumpfunsniper
-Pump.fun sniper bot 
+# pump-bot
+build pump bot

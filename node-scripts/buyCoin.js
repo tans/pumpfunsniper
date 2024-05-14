@@ -1,0 +1,12 @@
+const { Connection, PublicKey, Transaction } = require('@solana/web3.js');
+
+async function simulateTransaction(serializedTx) {
+    const connection = new Connection('https://api.devnet.solana.com', 'singleGossip');
+    const signedTransaction = Transaction.from(Buffer.from(serializedTx, 'base64'));
+    const simulateResult = await connection.simulateTransaction(signedTransaction);
+    console.log(simulateResult);
+}
+
+const serializedTransaction = '5omVyzZsNfw2PEv7N4ktdNokMpoeQ9y3bebwt47kB3NwbvSMF1yhg1pYWWLMSJYtWEcFv3yosyw2jCQ2TBSvA8Dz2dP7MHAKNGZwKDB4m5zyZJhpar14bDKBko1gBonrBPeLzBXX1ZGgqxJmMaVeaaUsiHenKHhVihGqDRHkfqFV51YRh4xVzyh418eDXMSPYtr1n1sdvAnNhtKJHdCX2xe8zYVEfVYnMRThnCTeS9t3Vt7Qs2AJifYPF1gExSZYGbKyZsDw1Gjp7efdkZFUc72FR8STvgdyGgy1P24a2qjEYycwm8vSUS4srNEGUoGDUZ9e7DzAxGhtg9CiFaR5f3yZuaeKKciCtUUwcPF22JroNeER9M1BeJP3sv3gjJJ6CCd4JUeVwjsKyTfcjpBjvDM7HNoC84NcFDBytyAdWhQKW4a6bei4JGwFHRLMH8gPe3FhzyyU7otg6NwdipypfwDJangPJTW2yLhuG9emiWBdQ2BDkutuz1FUbvUotkdjx4498NpZjqcFutXKcHSAEMFGqV7zR1j2aZFtr8ssKRoWJfhjbBjj3MUEk7JLH2pBze8XBUXz5CKmw8c8Ms2dWXmWjrYBG5iebesY8qvXghQ52hLh8JUx5vMc7mVhmcfYMpzQNEYLiHi2nV4BqQWJzS5MQG9dHqwHwKryoDowgRZZvifr6eVrG7669ZA9XWSt49bs36b1SVvuVV244C6AfJGw24iwKfpvDVNxvJvKXyJ2W3m9QGgdTPo2nW66Y1TDjcQGq4roX4R8eE4f1awRTMBKsyzJPzHVwV6rrPQCNwVzALC7UddL7JHSLUFRX7w7ejoDNcZRTHvJcf'; // Your Base58 or Base64 encoded transaction
+simulateTransaction(serializedTransaction);
+

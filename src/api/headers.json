@@ -1,0 +1,17 @@
+{
+  "Accept": "*/*",
+  "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
+  "Connection": "keep-alive",
+  "Content-Type": "application/json",
+  "DNT": "1",
+  "Origin": "https://pump.fun",
+  "Referer": "https://pump.fun/",
+  "Sec-Fetch-Dest": "empty",
+  "Sec-Fetch-Mode": "cors",
+  "Sec-Fetch-Site": "cross-site",
+  "Sec-GPC": "1",
+  "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+  "sec-ch-ua": "\"Not A(Brand\";v=\"99\", \"Brave\";v=\"121\", \"Chromium\";v=\"121\"",
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": "\"Linux\""
+}
