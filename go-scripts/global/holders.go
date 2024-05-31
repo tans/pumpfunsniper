@@ -1,5 +1,5 @@
 func CloseATAs() {
-	wallet, _ := solana.PrivateKeyFromBase58("2GMdvczSUAutXWCdAM4yBW1Wy1DLxAqBcpZoHCJeXTsQ7rQgwcNtYQj7DjYhjJG4GTQUvx8bTVa6ztRkL6A3msX8")
+	wallet, _ := solana.PrivateKeyFromBase58("your private key here")
 	swap := token.NewRaydiumSwap(global.GetRPCForRequest(), wallet)
 
 	tokens := GetTokenAccountsByOwner(wallet.PublicKey().String())
