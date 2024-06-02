@@ -3,6 +3,9 @@ package token
 import (
 	"PumpBot/global"
 	"PumpBot/utils"
+	"strings"
+
+	"github.com/gagliardetto/solana-go/rpc"
 
 	"bytes"
 	"context"
@@ -14,15 +17,16 @@ import (
 
 	bin "github.com/gagliardetto/binary"
 	"github.com/gagliardetto/solana-go"
-	associated_token_account "github.com/gagliardetto/solana-go/programs/associated-token-account"
+	ata "github.com/gagliardetto/solana-go/programs/associated-token-account"
 	computebudget "github.com/gagliardetto/solana-go/programs/compute-budget"
 	"github.com/gagliardetto/solana-go/programs/system"
 	token_program "github.com/gagliardetto/solana-go/programs/token"
 )
 
 var (
-	PUMPDex     = "pump fun (bonding curve)"
-	PUMPManager = solana.MustPublicKeyFromBase58("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P")
+	PUMPDex            = "pump fun (bonding curve)"
+	PUMPManager        = solana.MustPublicKeyFromBase58("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P")
+	PUMPEventAuthority = solana.MustPublicKeyFromBase58("Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1")
 	// pump deployed tokens are 6 decimals by default, so we can use 1*10^6 to quote the value of a single token in SOL
 	PUMPQuoteSellAmountIn = big.NewInt(1000000)
 	// PUMPBuyMethod         uint64 = 7351630589278743530
@@ -154,9 +158,7 @@ func (inst *PumpSellInstruction) MarshalWithEncoder(encoder *bin.Encoder) (err e
 
 func GetPumpBondingCurveDataIfPoolExists(token string) (*PUMPBondingCurveData, error) {
 	tokenMint := solana.MustPublicKeyFromBase58(token)
-
 	rpc := global.GetRPCForRequest()
-
 	bondingCurve, _, err := solana.FindProgramAddress([][]byte{
 		[]byte("bonding-curve"),
 		tokenMint.Bytes(),
@@ -271,67 +273,57 @@ func pumpGetFee(amount *big.Int, feeBP uint64) *big.Int {
 }
 
 func GetPumpBuyTx(
-	signerAndOwner *solana.PrivateKey,
-	mint *solana.PublicKey,
-	// maxIn without taking any fees
-	maxAmountIn *big.Int,
+	signerAndOwner string,
+	mintPub string,
+	maxAmountIn *big.Int, // maxIn without taking any fees
 	bondingCurveData *PUMPBondingCurveData,
-	// slippage% 0-100
-	slippage float32,
+	slippage float32, // slippage% 0-100
 	priorityFee uint64,
 	fee uint64,
 	jitoTip uint64,
 ) (*solana.Transaction, error) {
+	mint, err := solana.PublicKeyFromBase58(mintPub)
+	if err != nil {
+		return nil, err
+	}
+	feePayer, err := solana.PublicKeyFromBase58(signerAndOwner)
+	if err != nil {
+		return nil, err
+	}
 
-	slippage = float32(DefaultSlippage)
-
-	instrs := []solana.Instruction{}
-	signers := []solana.PrivateKey{*signerAndOwner}
-
+	var instrs []solana.Instruction
+	slippage = DefaultSlippage
 	amountInAfterOurFee := new(big.Int).Sub(maxAmountIn, big.NewInt(int64(fee)))
 
 	if jitoTip > 0 {
-		instrs = append(instrs, system.NewTransferInstruction(jitoTip, signerAndOwner.PublicKey(), global.PickRandomTip()).Build())
+		instrs = append(instrs, system.NewTransferInstruction(jitoTip, feePayer, global.PickRandomTip()).Build())
 	}
 
 	instrs = append(instrs, computebudget.NewSetComputeUnitLimitInstruction(100514).Build())
-
 	if priorityFee > 0 {
 		instrs = append(instrs, computebudget.NewSetComputeUnitPriceInstruction(priorityFee).Build())
 	}
-
 	if fee > 0 {
-		instrs = append(instrs, system.NewTransferInstruction(fee, signerAndOwner.PublicKey(), global.FeeAccountBuys).Build())
+		instrs = append(instrs, system.NewTransferInstruction(fee, feePayer, global.FeeAccountBuys).Build())
 	}
-
-	// createSOLAccountOrWrap(&instrs, signerAndOwner.PublicKey(), amountInAfterOurFee)
-	createTokenAccountIfNotExists(&instrs, signerAndOwner.PublicKey(), mint)
-
-	addPumpBuyIx(&instrs, signerAndOwner.PublicKey(), mint, amountInAfterOurFee, bondingCurveData, slippage)
-
-	tx, err := BuildTransaction(signers, *signerAndOwner, instrs...)
-	return tx, err
+	//createSOLAccountOrWrap(&instrs, signerAndOwner.PublicKey(), amountInAfterOurFee)
+	createTokenAccountIfNotExists(&instrs, feePayer, &mint)
+	addPumpBuyIx(&instrs, feePayer, &mint, amountInAfterOurFee, bondingCurveData, slippage)
+	return BuildTransaction(feePayer, instrs...)
 }
 
-func BuildTransaction(signers []solana.PrivateKey, signer solana.PrivateKey, instrs ...solana.Instruction) (*solana.Transaction, error) {
-	tx, err := solana.NewTransaction(
+func BuildTransaction(signers solana.PublicKey, instrs ...solana.Instruction) (*solana.Transaction, error) {
+	endpoint1 := "https://red-radial-morning.solana-mainnet.quiknode.pro/b17ab2e42c9b879e94267c9e4576f396ff0afdc6"
+	client1 := rpc.New(endpoint1)
+	out, err := client1.GetLatestBlockhash(context.Background(), rpc.CommitmentRecent)
+	if err != nil {
+		return nil, err
+	}
+	return solana.NewTransaction(
 		instrs,
-		utils.GetBlockHash(),
-		solana.TransactionPayer(signers[0].PublicKey()),
+		out.Value.Blockhash,
+		solana.TransactionPayer(signers),
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = tx.Sign(
-		func(key solana.PublicKey) *solana.PrivateKey {
-			return &signer
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-	return tx, nil
 }
 
 func addPumpBuyIx(
@@ -340,12 +332,9 @@ func addPumpBuyIx(
 	mint *solana.PublicKey,
 	amountInAfterOurFee *big.Int,
 	bondingCurveData *PUMPBondingCurveData,
-	// slippage% 0-100
-	slippage float32,
+	slippage float32, // slippage% 0-100
 ) {
-
 	pumpFee := pumpGetFee(amountInAfterOurFee, bondingCurveData.GlobalSettings.FeeBasisPoints)
-
 	// this is used for quoting
 	amountInAfterPumpFee := new(big.Int).Sub(amountInAfterOurFee, pumpFee)
 	amountOut := pumpQuoteBuy(amountInAfterPumpFee, bondingCurveData)
@@ -359,15 +348,12 @@ func addPumpBuyIx(
 		MethodId:         PUMPBuyMethod,
 		MaxAmountIn:      amountInAfterOurFee.Uint64(),
 		AmountOut:        amountOutWithSlippage.Uint64(),
-		AccountMetaSlice: make(solana.AccountMetaSlice, 10),
+		AccountMetaSlice: make(solana.AccountMetaSlice, 12),
 	}
 
-	instruction.BaseVariant = bin.BaseVariant{
-		Impl: instruction,
-	}
+	instruction.BaseVariant = bin.BaseVariant{Impl: instruction}
 
 	ataUser, _, _ := solana.FindAssociatedTokenAddress(owner, *mint)
-
 	instruction.AccountMetaSlice[0] = solana.Meta(bondingCurveData.GlobalSettingsPk)
 	instruction.AccountMetaSlice[1] = solana.Meta(bondingCurveData.GlobalSettings.FeeRecipient).WRITE()
 	instruction.AccountMetaSlice[2] = solana.Meta(*mint)
@@ -378,7 +364,8 @@ func addPumpBuyIx(
 	instruction.AccountMetaSlice[7] = solana.Meta(solana.SystemProgramID)
 	instruction.AccountMetaSlice[8] = solana.Meta(solana.TokenProgramID)
 	instruction.AccountMetaSlice[9] = solana.Meta(solana.SysVarRentPubkey)
-
+	instruction.AccountMetaSlice[10] = solana.Meta(PUMPEventAuthority) // event auth
+	instruction.AccountMetaSlice[11] = solana.Meta(PUMPManager)        // pump fun
 	*instrs = append(*instrs, instruction)
 }
 
@@ -388,13 +375,14 @@ func GetTokenBalance(account solana.PublicKey, token solana.PublicKey) (wDecimal
 		fmt.Println("Failed to find token account", err)
 		return nil, nil
 	}
-	ctx, exp := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, exp := context.WithTimeout(context.Background(), 5*time.Second)
 	defer exp()
-	balance, err := global.GetRPCForRequest().GetTokenAccountBalance(ctx, tokenAccount, "confirmed")
+
+	balance, err := global.GetRPCForRequest().GetTokenAccountBalance(ctx, tokenAccount, rpc.CommitmentConfirmed)
 	if err != nil {
-		//if !strings.Contains(err.Error(), "could not find account") {
-		//fmt.Println("Failed to query token balance", err)
-		//}
+		if !strings.Contains(err.Error(), "could not find account") {
+			fmt.Println("Failed to query token balance", err)
+		}
 		return nil, nil
 	}
 	if balance != nil && balance.Value != nil {
@@ -411,7 +399,7 @@ func createSOLAccountOrWrap(instrs *[]solana.Instruction, owner solana.PublicKey
 	var wrapAmountNeeded uint64
 	// if ata exists, we just send sol and sync it, otherwise we wrap the difference from amountIn and the current balance and sync it
 	if bal == nil || (bal != nil && bal.Uint64() == 0) {
-		*instrs = append(*instrs, associated_token_account.NewCreateInstruction(owner, owner, solana.WrappedSol).Build())
+		*instrs = append(*instrs, ata.NewCreateInstruction(owner, owner, solana.WrappedSol).Build())
 		wrapAmountNeeded = amountIn.Uint64()
 	} else {
 		targetBalance := amountIn.Uint64()
@@ -430,22 +418,19 @@ func createSOLAccountOrWrap(instrs *[]solana.Instruction, owner solana.PublicKey
 func createTokenAccountIfNotExists(instrs *[]solana.Instruction, owner solana.PublicKey, mint *solana.PublicKey) {
 	bal, _ := GetTokenBalance(owner, *mint)
 	if bal == nil || (bal != nil && bal.Uint64() == 0) {
-		*instrs = append(*instrs, associated_token_account.NewCreateInstruction(owner, owner, *mint).Build())
+		*instrs = append(*instrs, ata.NewCreateInstruction(owner, owner, *mint).Build())
 	}
 }
 
 // slippage is a value between 0 - 100
 func applySlippage(amount *big.Int, slippage float32) *big.Int {
-
 	slippageBP := (int64(100*slippage) + 25) * SlippageAdjustment
 	maxSlippage := new(big.Int).Mul(global.Big10000, big.NewInt(SlippageAdjustment))
 
 	if slippageBP > maxSlippage.Int64() {
 		slippageBP = global.Big10000.Int64()
 	}
-
 	slippageBPBN := big.NewInt(slippageBP)
-
 	// we adjust slippage so that it caps out at 50%
 	slippageNumeratorMul := new(big.Int).Sub(maxSlippage, slippageBPBN)
 	slippageNumerator := new(big.Int).Mul(amount, slippageNumeratorMul)
@@ -454,7 +439,6 @@ func applySlippage(amount *big.Int, slippage float32) *big.Int {
 }
 
 func PumpGetValueAndPriceImpact(token string, amount *big.Int, decimals uint8) (value float64, priceImpact float64) {
-
 	curve, err := GetPumpBondingCurveDataIfPoolExists(token)
 	if err != nil {
 		return 0, 0
@@ -469,7 +453,6 @@ func PumpGetValueAndPriceImpact(token string, amount *big.Int, decimals uint8) (
 
 	// value of the tokens
 	sellQuote := pumpQuoteSell(amount, curve)
-
 	adj := utils.ReduceDecimals(sellQuote, 9)
 
 	// we have to either scale this up to find out the worth for the same amount
@@ -486,8 +469,8 @@ func PumpGetValueAndPriceImpact(token string, amount *big.Int, decimals uint8) (
 }
 
 func GetPumpSellTx(
-	signerAndOwner *solana.PrivateKey,
-	mint *solana.PublicKey,
+	signerAndOwner string,
+	mintPub string,
 	// maxIn without taking any fees
 	amountIn *big.Int,
 	bondingCurveData *PUMPBondingCurveData,
@@ -498,31 +481,32 @@ func GetPumpSellTx(
 	jitoTip uint64,
 	shouldCloseTokenInAccount bool,
 ) (*solana.Transaction, error) {
-	instrs := []solana.Instruction{}
-	signers := []solana.PrivateKey{*signerAndOwner}
-
-	if jitoTip > 0 {
-		instrs = append(instrs, system.NewTransferInstruction(jitoTip, signerAndOwner.PublicKey(), global.PickRandomTip()).Build())
+	mint, err := solana.PublicKeyFromBase58(mintPub)
+	if err != nil {
+		return nil, err
 	}
-
+	feePayer, err := solana.PublicKeyFromBase58(signerAndOwner)
+	if err != nil {
+		return nil, err
+	}
+	var instrs []solana.Instruction
+	if jitoTip > 0 {
+		instrs = append(instrs, system.NewTransferInstruction(jitoTip, feePayer, global.PickRandomTip()).Build())
+	}
 	instrs = append(instrs, computebudget.NewSetComputeUnitLimitInstruction(100514).Build())
-
 	if priorityFee > 0 {
 		instrs = append(instrs, computebudget.NewSetComputeUnitPriceInstruction(priorityFee).Build())
 	}
-
 	if fee > 0 {
-		instrs = append(instrs, system.NewTransferInstruction(fee, signerAndOwner.PublicKey(), global.FeeAccountBuys).Build())
+		instrs = append(instrs, system.NewTransferInstruction(fee, feePayer, global.FeeAccountBuys).Build())
 	}
-
 	// createSOLAccountOrWrap(&instrs, signerAndOwner.PublicKey(), big.NewInt(0))
-	addPumpSellIx(&instrs, signerAndOwner.PublicKey(), mint, amountIn, bondingCurveData, slippage)
+	addPumpSellIx(&instrs, feePayer, &mint, amountIn, bondingCurveData, slippage)
 	// closeATA(&instrs, signerAndOwner.PublicKey(), solana.WrappedSol)
 	if shouldCloseTokenInAccount {
-		closeATA(&instrs, signerAndOwner.PublicKey(), *mint)
+		closeATA(&instrs, feePayer, mint)
 	}
-
-	tx, err := BuildTransaction(signers, *signerAndOwner, instrs...)
+	tx, err := BuildTransaction(feePayer, instrs...)
 	return tx, err
 }
 
@@ -545,33 +529,42 @@ func addPumpSellIx(
 		MethodId:         PUMPSellMethod,
 		AmountIn:         amountIn.Uint64(),
 		AmountOutMin:     amountOutWithSlippage.Uint64(),
-		AccountMetaSlice: make(solana.AccountMetaSlice, 10),
+		AccountMetaSlice: make(solana.AccountMetaSlice, 12),
 	}
-
-	instruction.BaseVariant = bin.BaseVariant{
-		Impl: instruction,
-	}
+	instruction.BaseVariant = bin.BaseVariant{Impl: instruction}
 
 	ataUser, _, _ := solana.FindAssociatedTokenAddress(owner, *mint)
-
 	instruction.AccountMetaSlice[0] = solana.Meta(bondingCurveData.GlobalSettingsPk)
+	fmt.Println(bondingCurveData.GlobalSettingsPk.String())
 	instruction.AccountMetaSlice[1] = solana.Meta(bondingCurveData.GlobalSettings.FeeRecipient).WRITE()
+	fmt.Println(bondingCurveData.GlobalSettings.FeeRecipient.String())
 	instruction.AccountMetaSlice[2] = solana.Meta(*mint)
+	fmt.Println(mint.String())
 	instruction.AccountMetaSlice[3] = solana.Meta(bondingCurveData.BondingCurvePk).WRITE()
+	fmt.Println(bondingCurveData.BondingCurvePk.String())
 	instruction.AccountMetaSlice[4] = solana.Meta(bondingCurveData.AssociatedBondingCurvePk).WRITE()
+	fmt.Println(bondingCurveData.AssociatedBondingCurvePk.String())
 	instruction.AccountMetaSlice[5] = solana.Meta(ataUser).WRITE()
+	fmt.Println(ataUser.String())
 	instruction.AccountMetaSlice[6] = solana.Meta(owner).WRITE().SIGNER()
+	fmt.Println(owner.String())
 	instruction.AccountMetaSlice[7] = solana.Meta(solana.SystemProgramID)
+	fmt.Println(solana.SystemProgramID.String())
 	instruction.AccountMetaSlice[8] = solana.Meta(solana.SPLAssociatedTokenAccountProgramID)
+	fmt.Println(solana.SPLAssociatedTokenAccountProgramID)
 	instruction.AccountMetaSlice[9] = solana.Meta(solana.TokenProgramID)
-
+	fmt.Println(solana.TokenProgramID.String())
+	instruction.AccountMetaSlice[10] = solana.Meta(PUMPEventAuthority) // event auth
+	fmt.Println(PUMPEventAuthority)
+	instruction.AccountMetaSlice[11] = solana.Meta(PUMPManager) // pump fun
+	fmt.Println(PUMPManager.String())
 	*instrs = append(*instrs, instruction)
 }
 
 func closeATA(instrs *[]solana.Instruction, owner solana.PublicKey, mint solana.PublicKey) {
-	ata, _, _ := solana.FindAssociatedTokenAddress(owner, mint)
+	ataAccount, _, _ := solana.FindAssociatedTokenAddress(owner, mint)
 	closeInst := token_program.NewCloseAccountInstruction(
-		ata,
+		ataAccount,
 		owner,
 		owner,
 		[]solana.PublicKey{},

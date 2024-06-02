@@ -9,7 +9,6 @@ import (
 
 	"net/url"
 
-	"github.com/alphbuff/gojito/client"
 	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/gagliardetto/solana-go/rpc/ws"
 )
@@ -64,31 +63,34 @@ func ConvertToWSURL(urlString string) string {
 	return finalURL
 }
 
-func BuildJitoClient() {
-	c, err := client.NewGojitoClient(
-		"https://ny.mainnet.block-engine.jito.wtf",
-		"",
-		"./Jito_Mev_Key.json",
-		false,
-	)
-	if err != nil {
-		log.Println("Jito Connect Err:", err)
-	} else {
-		JitoClient = c
-	}
-}
+//
+//func BuildJitoClient() {
+//	c, err := client.NewGojitoClient(
+//		"https://ny.mainnet.block-engine.jito.wtf",
+//		"",
+//		"./Jito_Mev_Key.json",
+//		false,
+//	)
+//	if err != nil {
+//		log.Println("Jito Connect Err:", err)
+//	} else {
+//		JitoClient = c
+//	}
+//}
 
 func GetRPCForRequest() *rpc.Client {
-	rpcMutex.Lock()
-	defer rpcMutex.Unlock()
-	last := RPCLast.Load()
-	if last < RPCLen {
-		RPCLast.Store(last + 1)
-		last += 1
-	} else {
-		RPCLast.Store(0)
-	}
-	return RPCServers[last]
+	//rpcMutex.Lock()
+	//defer rpcMutex.Unlock()
+	//last := RPCLast.Load()
+	//if last < RPCLen {
+	//	RPCLast.Store(last + 1)
+	//	last += 1
+	//} else {
+	//	RPCLast.Store(0)
+	//}
+	//return RPCServers[last]
+	endpoint := "https://red-radial-morning.solana-mainnet.quiknode.pro/b17ab2e42c9b879e94267c9e4576f396ff0afdc6"
+	return rpc.New(endpoint)
 }
 
 func GetWSRPCForRequest() (*rpc.Client, *ws.Client) {

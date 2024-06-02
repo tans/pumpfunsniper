@@ -5,15 +5,14 @@ package global
 import (
 	atomic_ "PumpBot/utils/atomic"
 	"fmt"
+	"github.com/gagliardetto/solana-go"
+	"github.com/gagliardetto/solana-go/rpc"
 	"math/big"
 	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/alphbuff/gojito/client"
-	"github.com/gagliardetto/solana-go"
-	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/gagliardetto/solana-go/rpc/ws"
 	"github.com/joho/godotenv"
 )
@@ -58,7 +57,7 @@ var (
 	OneB            = new(big.Float).SetInt(OneBillion)
 	OneM            = new(big.Float).SetInt(OneMillion)
 	FloatConst      = []*big.Float{}
-	JitoClient      *client.GojitoClient
+	//JitoClient      *client.GojitoClient
 
 	LIMIT_TRAILING = 1
 	LIMIT_STOP     = 2
@@ -103,7 +102,7 @@ var (
 	FeeAccountBuys, _ = solana.PublicKeyFromBase58("4BBNEVRgrxVKv9f7pMNE788XM1tt379X9vNjpDH2KCL7")
 	QuoteAmount       = big.NewInt(1000000)
 	Big10000          = big.NewInt(10000)
-	SwapFeeBPS = "100"
+	SwapFeeBPS        = "100"
 
 	UserCfgMutexes = make(map[int64]*sync.RWMutex)
 )
